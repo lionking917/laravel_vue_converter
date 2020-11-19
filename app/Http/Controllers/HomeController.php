@@ -10,9 +10,8 @@ class HomeController extends Controller
     {
     }
 
-    public function uploadFiles(Request $request){
-        $a = 'aa';
-        $b = 'bb';
+    public function index(){
+        return view('index');
     }
     
 }
