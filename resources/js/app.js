@@ -9,10 +9,15 @@ require('./bootstrap');
 window.Vue = require('vue');
 
 import VueRouter from 'vue-router';
+import vSelect from "vue-select";
 import routes from './routes';
 import HomeComponent from "./components/HomeComponent.vue";
 
+import "vue-select/dist/vue-select.css";
+import "./assets/css/style.scss";
+
 Vue.use(VueRouter);
+Vue.component("v-select", vSelect);
 
 const router = new VueRouter({  routes });
 
