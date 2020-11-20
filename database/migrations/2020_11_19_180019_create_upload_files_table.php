@@ -15,14 +15,16 @@ class CreateUploadFilesTable extends Migration
     {
         Schema::create('upload_files', function (Blueprint $table) {
             $table->increments('id');
-
-            $table->string('uuid')->default('');
-            $table->string('file_type')->default('');
+            $table->string('org_type')->default('');
+            $table->string('org_name')->default('');
+            $table->integer('org_size')->default(0);
             $table->string('file_name')->default('');
-            $table->integer('file_size')->default(0);
-            $table->string('conv_lang')->default('');
-            $table->integer('conv_status')->default(0);
-            
+            $table->string('html_name')->default('');
+            $table->string('conv_name')->default('');
+            $table->string('to_lang')->default('');
+            $table->integer('job_id')->default(0);
+            $table->integer('file_id')->default(0);
+            $table->integer('status')->default(0);
             $table->timestamps();
         });
     }

@@ -19,3 +19,4 @@ use Illuminate\Support\Facades\Route;
 // });
 
 Route::post('/upload-file', 'APIController@uploadFile')->where('any', '.*');
+Route::post('/convert-file', 'APIController@convertFile')->where('any', '.*');

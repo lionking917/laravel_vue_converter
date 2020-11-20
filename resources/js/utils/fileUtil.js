@@ -7,4 +7,9 @@ function fileUpload(formData) {
     return axios.post(url, formData);
 }
 
-export { fileUpload }
+function fileConvert(formData) {
+    const url = `${BASE_URL}/api/convert-file`;
+    return axios.post(url, formData);
+}
+
+export { fileUpload, fileConvert }

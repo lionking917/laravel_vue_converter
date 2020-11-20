@@ -44,6 +44,22 @@ $blue_color: #0992f1;
 
 .input-file {opacity: 0;width: 100%;height: 150px;position: absolute;cursor: pointer;}
 
+.lang-select input::-webkit-input-placeholder { /* Chrome/Opera/Safari/ */
+  color: #ebebeb;
+}
+
+.lang-select input:-moz-placeholder { /* Firefox 18- */
+  color: #ebebeb;
+}
+
+.lang-select input::-moz-placeholder {  /* Firefox 19+ */
+  color: #ebebeb;
+}
+
+.lang-select input:-ms-input-placeholder {  /* IE */
+  color: #ebebeb;
+}
+
 .dropbox-inner{
   display: flex;flex-direction: row;justify-content: center;align-items: center;height: 100%;
   .img-rt{margin-right: 15px;}
