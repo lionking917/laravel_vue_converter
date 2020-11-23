@@ -54,7 +54,7 @@ class APIController extends Controller
             $endpoint = "https://sandbox.zamzar.com/v1/jobs";
             $apiKey = env('ZAMZAR_API_KEY');
             $sourceFilePath = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $uploadFile->file_name;
-            $targetFormat = "html";
+            $targetFormat = "html5-1page";
 
             // Since PHP 5.5+ CURLFile is the preferred method for uploading files
             if(function_exists('curl_file_create')) {
