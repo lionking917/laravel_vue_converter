@@ -12,4 +12,14 @@ function fileConvert(formData) {
     return axios.post(url, formData);
 }
 
-export { fileUpload, fileConvert }
+function jobCheck(formData) {
+    const url = `${BASE_URL}/api/check-job`;
+    return axios.post(url, formData);
+}
+
+function fileDownload(formData) {
+    const url = `${BASE_URL}/api/download-file`;
+    return axios.post(url, formData);
+}
+
+export { fileUpload, fileConvert, jobCheck, fileDownload }

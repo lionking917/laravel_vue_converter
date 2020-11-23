@@ -10,6 +10,6 @@ class UploadFile extends Model
     protected $table = 'upload_files';
 
     protected $fillable = [
-        'org_type', 'org_name', 'org_size', 'file_name', 'html_name', 'conv_name', 'job_id', 'file_id', 'to_lang', 'status'
+        'file_type', 'file_name', 'file_size', 'to_lang', 'job_id', 'target_files', 'status'
     ];
 }
