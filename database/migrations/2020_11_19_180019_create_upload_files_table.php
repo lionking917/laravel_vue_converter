@@ -20,7 +20,7 @@ class CreateUploadFilesTable extends Migration
             $table->integer('file_size')->default(0);
             $table->string('to_lang')->default('');
             $table->integer('job_id')->default(0);
-            $table->string('target_files')->default('');
+            $table->text('target_files')->default('');
             $table->string('status')->default('');
             $table->timestamps();
         });

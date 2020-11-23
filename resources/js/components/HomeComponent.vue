@@ -59,7 +59,8 @@
                 uFileId: -1,
                 jobId: -1,
                 timer: null,
-                targetFiles: []
+                targetFiles: [],
+                isCheckingJob: false
             }
         },
         methods: {
@@ -99,7 +100,11 @@
                     if (res.status == 200) {
                         this.jobId = res.data.jobId;
                         this.message = res.data.message;
-                        if (this.timer) clearInterval(this.timer);
+                        if (this.timer) {
+                            clearInterval(this.timer);
+                            this.timer = null;
+                        }
+                        this.isCheckingJob = false;
                         this.timer = setInterval(this.checkJob, 2500);
                     }
                 })
@@ -110,11 +115,13 @@
                 });
             },
             checkJob() {
+                if (this.isCheckingJob) return;
                 this.message = "Checking Zamzar job is finished...";
 
                 const formData = new FormData();
                 formData.append('uFileId', this.uFileId);
                 formData.append('jobId', this.jobId);
+                this.isCheckingJob = true;
                 jobCheck(formData)
                 .then(res => {
                     if (res.status == 200) {
@@ -123,36 +130,34 @@
 
                         if (status == 'successful') {
                             clearInterval(this.timer);
+                            this.timer = null;
                             this.targetFiles = res.data.targetFiles;
                             this.downloadFiles();
                         }
                     }
+                    this.isCheckingJob = false;
                 })
                 .catch(err => {
                     console.log(err);
                     this.message = 'Zamzar job failed. Try again to upload file.';
                     this.isConverting = false;
+                    this.isCheckingJob = false;
                     clearInterval(this.timer);
+                    this.timer = null;
                 });
             },
-            downloadFiles() {
-                this.targetFiles.forEach(async (targetFile) => {
-                    try {
-                        this.message = `Started downloading zamzar file${targetFile['name']} to server...`;
-                        const formData = new FormData();
-                        formData.append('uFileId', this.uFileId);
-                        formData.append('targetFile', targetFile);
-                        const res = await fileDownload(formData);
-                        if (res.status == 200) {
-                            this.message = res.data.message;
-                            wait(1000);
-                        }
-                    } catch (err) {
-                        console.log(err);
-                        this.message = 'Downloading zamzar files to server failed. Try upload file again.';
-                        this.isConverting = false;
-                    }
+            async downloadFiles() {
+                this.message = `Started downloading zamzar files to server...`;
+                const promises = this.targetFiles.map(targetFile => {
+                    const formData = new FormData();
+                    formData.append('uFileId', this.uFileId);
+                    formData.append('targetFileId', targetFile['id']);
+                    formData.append('targetFileName', targetFile['name']);
+                    return fileDownload(formData);
                 });
+                await Promise.all(promises);
+                this.message = `Downloading zamzar files to server finished...`;
+                this.isConverting = false;
             },
             filesChange(fileList) {
                 // handle file changes

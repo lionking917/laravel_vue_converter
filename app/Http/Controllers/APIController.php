@@ -130,7 +130,7 @@ class APIController extends Controller
                 return response()->json([
                     'message' => 'Zamzar job finished successfully',
                     'status' => 'successful',
-                    'targetFiles' => $targetFiles
+                    'targetFiles' => $job['target_files']
                 ]);
             } else {
                 return response()->json([
@@ -148,10 +148,17 @@ class APIController extends Controller
     public function downloadFile(Request $request) {
         try {
             $uFileId = $request->uFileId;
-            $targetFile = $request->targetFile;
+            $targetFileId = $request->targetFileId;
+            $targetFileName = $request->targetFileName;
 
-            $localFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $targetFile['name'];
-            $endpoint = "https://sandbox.zamzar.com/v1/files/$fileId/content";
+            $localFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $targetFileName;
+            $localDirname = dirname($localFilename);
+
+            if (!is_dir($localDirname)) {
+                mkdir($localDirname, 0755, true);
+            }
+
+            $endpoint = "https://sandbox.zamzar.com/v1/files/$targetFileId/content";
             $apiKey = env('ZAMZAR_API_KEY');
 
             $ch = curl_init(); // Init curl
@@ -166,7 +173,7 @@ class APIController extends Controller
             curl_close($ch);
 
             return response()->json([
-                'message' => 'Downloaded zamzar file ' . $targetFile['name'] . ' to server successfully'
+                'message' => 'Downloaded zamzar file ' . $targetFileName . ' to server successfully'
             ]);
         } catch (\Throwable $th) {
             return response()->json([
