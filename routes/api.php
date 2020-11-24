@@ -22,3 +22,7 @@ Route::post('/upload-file', 'APIController@uploadFile')->where('any', '.*');
 Route::post('/convert-file', 'APIController@convertFile')->where('any', '.*');
 Route::post('/check-job', 'APIController@checkJob')->where('any', '.*');
 Route::post('/download-file', 'APIController@downloadFile')->where('any', '.*');
+Route::post('/split-html-file', 'APIController@splitHtmlFile')->where('any', '.*');
+Route::post('/translate-html', 'APIController@translateHtml')->where('any', '.*');
+Route::post('/merge-htmls', 'APIController@mergeHtmls')->where('any', '.*');
+Route::get('/convert-html-pdf', 'APIController@convertHtmlPdf')->where('any', '.*');

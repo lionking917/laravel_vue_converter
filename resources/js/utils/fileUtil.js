@@ -22,4 +22,24 @@ function fileDownload(formData) {
     return axios.post(url, formData);
 }
 
-export { fileUpload, fileConvert, jobCheck, fileDownload }
+function htmlFileSplit(formData) {
+    const url = `${BASE_URL}/api/split-html-file`;
+    return axios.post(url, formData);
+}
+
+function htmlTranslate(formData) {
+    const url = `${BASE_URL}/api/translate-html`;
+    return axios.post(url, formData);
+}
+
+function htmlsMerge(formData) {
+    const url = `${BASE_URL}/api/merge-htmls`;
+    return axios.post(url, formData);
+}
+
+function htmlPdfConvert(formData) {
+    const url = `${BASE_URL}/api/convert-html-pdf`;
+    return axios.get(url);
+}
+
+export { fileUpload, fileConvert, jobCheck, fileDownload, htmlFileSplit, htmlPdfConvert, htmlTranslate, htmlsMerge }

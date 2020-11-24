@@ -45,8 +45,6 @@ const getStrDate = (d) => {
 }
 
 const wait = (ms) => {
-  return (x) => {
-      return new Promise(resolve => setTimeout(() => resolve(x), ms));
-  };
+    return new Promise(resolve => setTimeout(() => resolve(''), ms));
 }
 export { getSubTitle, getDateInfo, getNewDate, getStrDate, wait }
