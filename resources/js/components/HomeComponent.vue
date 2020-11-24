@@ -30,6 +30,9 @@
                         <p>{{ message }}</p>
                         <b-spinner v-show="isConverting" variant="primary" label="Spinning"></b-spinner>
                     </div>
+                    <div class="mt-3 text-center">
+                        <iframe v-show="htmlFilename != ''" :src="htmlFilename" style="width: 100%;" height="500"></iframe>
+                    </div>
                 </div>
             </div>
         </div>
@@ -61,7 +64,8 @@
                 timer: null,
                 targetFiles: [],
                 isCheckingJob: false,
-                htmlCnt: 0
+                htmlCnt: 0,
+                htmlFilename: ''
             }
         },
         methods: {
@@ -133,7 +137,7 @@
                             clearInterval(this.timer);
                             this.timer = null;
                             this.targetFiles = res.data.targetFiles;
-                            this.downloadFiles();
+                            this.downloadFile();
                         }
                     }
                     this.isCheckingJob = false;
@@ -147,19 +151,32 @@
                     this.timer = null;
                 });
             },
-            async downloadFiles() {
+            async downloadFile() {
                 try {
+                    // this.message = 'Started downloading zamzar files to server...';
+                    // const promises = this.targetFiles.map(targetFile => {
+                        
+                    // });
+                    // await Promise.all(promises);
+                    // this.message = `Downloading zamzar files to server finished...`;
+                    // // this.splitHtmlFile();
+
                     this.message = 'Started downloading zamzar files to server...';
-                    const promises = this.targetFiles.map(targetFile => {
-                        const formData = new FormData();
-                        formData.append('uFileId', this.uFileId);
-                        formData.append('targetFileId', targetFile['id']);
-                        formData.append('targetFileName', targetFile['name']);
-                        return fileDownload(formData);
+                    const formData = new FormData();
+                    formData.append('uFileId', this.uFileId);
+                    formData.append('targetFileId', targetFile['id']);
+                    formData.append('targetFileName', targetFile['name']);
+                    fileDownload(formData)
+                    .then(res => {
+                        if (res.status == 200) {
+                            this.message = res.data.message;
+                            this.htmlFilename = res.data.htmlFilename;
+                        }
+                    })
+                    .catch(err => {
+                        console.log(err);
                     });
-                    await Promise.all(promises);
                     this.message = `Downloading zamzar files to server finished...`;
-                    this.splitHtmlFile();
                 } catch (err) {
                     console.log(err);
                     this.message = 'Downloading zamzar files to server failed. Try to upload file again.'
@@ -210,6 +227,7 @@
                 .then(res => {
                     if (res.status == 200) {
                         this.message = res.data.message;
+                        this.htmlFilename = res.data.htmlFilename;
                     }
                 })
                 .catch(err => {

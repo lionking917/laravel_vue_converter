@@ -176,7 +176,8 @@ class APIController extends Controller
             fclose($fh);
 
             return response()->json([
-                'message' => 'Downloaded zamzar file ' . $targetFileName . ' to server successfully'
+                'message' => 'Downloaded zamzar file ' . $targetFileName . ' to server successfully',
+                'htmlFilename' => $localFilename
             ]);
         } catch (\Throwable $th) {
             return response()->json([
@@ -282,7 +283,8 @@ class APIController extends Controller
             fclose($fh);
 
             return response()->json([
-                'message' => 'Merging htmls succeeded'
+                'message' => 'Merging htmls succeeded',
+                'htmlFilename' => $transHtmlFilename
             ]);
         } catch (\Throwable $th) {
             return response()->json([
