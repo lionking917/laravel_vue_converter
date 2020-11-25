@@ -18,8 +18,7 @@ class CreateUploadFilesTable extends Migration
             $table->string('file_type')->default('');
             $table->string('file_name')->default('');
             $table->integer('file_size')->default(0);
-            $table->longtext('src_splitted_html')->default('');
-            $table->longtext('trns_splitted_html')->default('');
+            $table->string('from_lang')->default('');
             $table->string('to_lang')->default('');
             $table->integer('job_id')->default(0);
             $table->text('target_files')->default('');

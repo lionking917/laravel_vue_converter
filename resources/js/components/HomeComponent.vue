@@ -4,7 +4,8 @@
             <div class="card">
                 <div class="card-header text-center">Converter && Translator</div>
                 <div class="card-body">
-                    <v-select class="lang-select" :options="languages" :reduce="language => language.code" label="label" v-model="targetLanguage" :disabled="isConverting" placeholder="Select target language"></v-select>
+                    <v-select class="lang-select" :options="languages" :reduce="language => language.code" label="label" v-model="sourceLanguage" :disabled="isConverting" placeholder="Select source language"></v-select>
+                    <v-select class="lang-select mt-3" :options="languages" :reduce="language => language.code" label="label" v-model="targetLanguage" :disabled="isConverting" placeholder="Select target language"></v-select>
                     <div class="flex-1 form-ctrl mt-3">
                         <form enctype="multipart/form-data" novalidate >
                             <div class="dropbox">
@@ -24,14 +25,11 @@
                         </form>
                     </div>
                     <div class="mt-3 text-center">
-                        <button type="button" class="btn btn-primary" @click="uploadFile()" :disabled="!targetLanguage || formData == null || isConverting" >Upload</button>
+                        <button type="button" class="btn btn-primary" @click="uploadFile()" :disabled="!sourceLanguage || !targetLanguage || formData == null || isConverting" >Upload</button>
                     </div>
                     <div class="mt-3 text-center">
                         <p>{{ message }}</p>
                         <b-spinner v-show="isConverting" variant="primary" label="Spinning"></b-spinner>
-                    </div>
-                    <div class="mt-3 text-center">
-                        <iframe v-show="htmlFilename != ''" :src="htmlFilename" style="width: 100%;" height="500"></iframe>
                     </div>
                 </div>
             </div>
@@ -44,7 +42,7 @@
     import { fileUpload, fileConvert, jobCheck, fileDownload, htmlFileSplit, htmlPdfConvert, htmlTranslate, htmlsMerge } from '../utils/fileUtil';
     import { wait } from '../utils/otherUtil';
 
-    const STATUS_INITIAL = 0, STATUS_UPLOADING = 1, STATUS_CONVERTING = 2, STATUS_TRANSLATING = 3, STATUS_INVERTING = 4, STATUS_SUCCESS = 5, STATUS_FAILED = 6;
+    // const STATUS_INITIAL = 0, STATUS_UPLOADING = 1, STATUS_CONVERTING = 2, STATUS_TRANSLATING = 3, STATUS_INVERTING = 4, STATUS_SUCCESS = 5, STATUS_FAILED = 6;
 
     export default {
         mounted() {
@@ -56,6 +54,7 @@
                 // uploadedFiles: [],
                 // uploadError: null,
                 isConverting: false,
+                sourceLanguage: '',
                 targetLanguage: '',
                 formData: null,
                 message: '',
@@ -65,7 +64,7 @@
                 targetFiles: [],
                 isCheckingJob: false,
                 htmlCnt: 0,
-                htmlFilename: ''
+                // htmlFilename: ''
             }
         },
         methods: {
@@ -81,6 +80,7 @@
                 // this.currentStatus = STATUS_UPLOADING;
                 this.message = "File uploading to server...";
 
+                this.formData.append('fromLang', this.sourceLanguage);
                 this.formData.append('toLang', this.targetLanguage);
                 fileUpload(this.formData)
                 .then(res => {
@@ -162,6 +162,8 @@
                     // // this.splitHtmlFile();
 
                     this.message = 'Started downloading zamzar files to server...';
+                    const targetFile = this.targetFiles[0];
+
                     const formData = new FormData();
                     formData.append('uFileId', this.uFileId);
                     formData.append('targetFileId', targetFile['id']);
@@ -170,7 +172,8 @@
                     .then(res => {
                         if (res.status == 200) {
                             this.message = res.data.message;
-                            this.htmlFilename = res.data.htmlFilename;
+                            // this.htmlFilename = res.data.htmlFilename;
+                            window.open(window.location.origin + "/translation?uFileId=" + this.uFileId, "_blank");
                         }
                     })
                     .catch(err => {
@@ -183,76 +186,76 @@
                     this.isConverting = false;
                 }
             },
-            splitHtmlFile() {
-                this.message = 'Splitting html file started';
-                const formData = new FormData();
-                formData.append('uFileId', this.uFileId);
-                htmlFileSplit(formData)
-                .then(res => {
-                    if (res.status == 200) {
-                        this.message = res.data.message;
-                        this.htmlCnt = res.data.htmlCnt;
-                        this.translateHtml();
-                    }
-                })
-                .catch(err => {
-                    console.log(err);
-                    this.message = 'Splitting html file failed';
-                    this.isConverting = false;
-                });
-            },
-            async translateHtml() {
-                try {
-                    this.message = 'Started translating htmls...';
-                    const arr = new Array(this.htmlCnt).fill(1);
-                    const promises = arr.map((item, index) => {
-                        const formData = new FormData();
-                        formData.append('uFileId', this.uFileId);
-                        formData.append('fIndex', index);
-                        return htmlTranslate(formData);
-                    });
-                    await Promise.all(promises);
-                    this.message = `Translating htmls finished...`;
-                    this.mergeHtmls();
-                } catch {
-                    this.message = 'Translating htmls failed. Try to upload file again.'
-                    this.isConverting = false;
-                }
-            },
-            mergeHtmls() {
-                this.message = 'Started merging htmls...';
-                const formData = new FormData();
-                formData.append('uFileId', this.uFileId);
-                htmlsMerge(formData)
-                .then(res => {
-                    if (res.status == 200) {
-                        this.message = res.data.message;
-                        this.htmlFilename = res.data.htmlFilename;
-                    }
-                })
-                .catch(err => {
-                    console.log(err);
-                    this.message = 'Merging htmls failed';
-                    this.isConverting = false;
-                });
-                this.message = `Merging htmls finished...`;
-            },
-            convertHtmlPdf() {
-                this.message = 'Converting html to pdf started';
-                const formData = new FormData();
-                formData.append('uFileId', this.uFileId);
-                htmlPdfConvert(formData)
-                .then(res => {
-                    if (res.status == 200) {
-                        this.message = res.data.message;
-                    }
-                })
-                .catch(err => {
-                    console.log(err);
-                    this.message = 'Converting html to pdf failed';
-                    this.isConverting = false;
-                });
-            },
+            // splitHtmlFile() {
+            //     this.message = 'Splitting html file started';
+            //     const formData = new FormData();
+            //     formData.append('uFileId', this.uFileId);
+            //     htmlFileSplit(formData)
+            //     .then(res => {
+            //         if (res.status == 200) {
+            //             this.message = res.data.message;
+            //             this.htmlCnt = res.data.htmlCnt;
+            //             this.translateHtml();
+            //         }
+            //     })
+            //     .catch(err => {
+            //         console.log(err);
+            //         this.message = 'Splitting html file failed';
+            //         this.isConverting = false;
+            //     });
+            // },
+            // async translateHtml() {
+            //     try {
+            //         this.message = 'Started translating htmls...';
+            //         const arr = new Array(this.htmlCnt).fill(1);
+            //         const promises = arr.map((item, index) => {
+            //             const formData = new FormData();
+            //             formData.append('uFileId', this.uFileId);
+            //             formData.append('fIndex', index);
+            //             return htmlTranslate(formData);
+            //         });
+            //         await Promise.all(promises);
+            //         this.message = `Translating htmls finished...`;
+            //         this.mergeHtmls();
+            //     } catch {
+            //         this.message = 'Translating htmls failed. Try to upload file again.'
+            //         this.isConverting = false;
+            //     }
+            // },
+            // mergeHtmls() {
+            //     this.message = 'Started merging htmls...';
+            //     const formData = new FormData();
+            //     formData.append('uFileId', this.uFileId);
+            //     htmlsMerge(formData)
+            //     .then(res => {
+            //         if (res.status == 200) {
+            //             this.message = res.data.message;
+            //             // this.htmlFilename = res.data.htmlFilename;
+            //         }
+            //     })
+            //     .catch(err => {
+            //         console.log(err);
+            //         this.message = 'Merging htmls failed';
+            //         this.isConverting = false;
+            //     });
+            //     this.message = `Merging htmls finished...`;
+            // },
+            // convertHtmlPdf() {
+            //     this.message = 'Converting html to pdf started';
+            //     const formData = new FormData();
+            //     formData.append('uFileId', this.uFileId);
+            //     htmlPdfConvert(formData)
+            //     .then(res => {
+            //         if (res.status == 200) {
+            //             this.message = res.data.message;
+            //         }
+            //     })
+            //     .catch(err => {
+            //         console.log(err);
+            //         this.message = 'Converting html to pdf failed';
+            //         this.isConverting = false;
+            //     });
+            // },
             filesChange(fileList) {
                 // handle file changes
                 this.formData = new FormData();

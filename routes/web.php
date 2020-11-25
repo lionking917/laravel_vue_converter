@@ -14,3 +14,4 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', 'HomeController@index')->where('any', '.*');
+Route::get('/translation', 'HomeController@translation')->where('any', '.*');
