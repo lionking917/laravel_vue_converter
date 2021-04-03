@@ -22,7 +22,7 @@ class HomeController extends Controller
         $arr = explode('.', $fileName);
         $fName = $arr[0];
         
-        $htmlFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $fName . '_translated.html';
+        $htmlFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $fName . '.html';
 
         $content = file_get_contents($htmlFilename);
         $dom = new \DOMDocument();

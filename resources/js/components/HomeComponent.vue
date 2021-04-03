@@ -41,7 +41,7 @@
 
 <script>
     import languages from '../languages.js';
-    import { fileUpload, fileConvert, jobCheck, fileDownload } from '../utils/fileUtil';
+    import { fileUpload, fileConvert, htmlTranslate } from '../utils/fileUtil';
     
     export default {
         mounted() {
@@ -56,6 +56,10 @@
                 formData: null,
                 message: '',
                 uFileId: -1,
+                interval: null,
+                isTranslating: false,
+                translatedEntityCnt: 0,
+                translationFailedCnt: 0,
             }
         },
         methods: {
@@ -87,9 +91,11 @@
                 formData.append('uFileId', this.uFileId);
                 fileConvert(formData)
                 .then(res => {
-                    this.message = 'File converted successfully.';
-                    this.isConverting = false;
-                    this.downloadFile(res.data.url, res.data.fileName);
+                    this.message = 'File translating...';
+                    this.translationFailedCnt = 0;
+                    this.interval = setInterval(() => {
+                        this.translateHTML();
+                    }, 2000);
                 })
                 .catch(err => {
                     console.log(err);
@@ -100,6 +106,36 @@
                         this.message = 'File converting failed. Please try again.';
                     }
                     this.isConverting = false;
+                });
+            },
+            async translateHTML() {
+                if (this.isTranslating) return;
+                const formData = new FormData();
+                formData.append('uFileId', this.uFileId);
+                formData.append('translatedEntityCnt', this.translatedEntityCnt);
+
+                this.isTranslating = true;
+                htmlTranslate(formData)
+                .then(res => {
+                    this.translatedEntityCnt = res.data.translatedEntityCnt;
+                    if (res.data.isTranslationFinished) {
+                        this.isConverting = false;
+                        this.message = 'File translated successfully.';
+                        clearInterval(this.interval);
+                        this.downloadFile(res.data.url, res.data.fileName);
+                    }
+                    this.isTranslating = false;
+                })
+                .catch(err => {
+                    console.log(err);
+                    this.isTranslating = false;
+                    this.translationFailedCnt ++;
+                    if (this.translationFailedCnt == 10) {
+                        this.isConverting = false;
+                        this.isTranslating = false;
+                        clearInterval(this.interval);
+                        this.message = 'File translation failed. Please try again.';
+                    }
                 });
             },
             async downloadFile(uri, name) {

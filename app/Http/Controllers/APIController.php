@@ -82,7 +82,6 @@ class APIController extends Controller
 
     public function convertFile(Request $request) {
         try {
-            $originPath = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
             $uFileId = $request->uFileId;
             $uploadFile = UploadFile::find($uFileId);
 
@@ -117,15 +116,16 @@ class APIController extends Controller
             $workflowId = $this->workflows['TOHTML'];
             
             $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
-            $translatedOutputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '_translated.html';
 
             $b = $this->convertEasyPdfCloud($workflowId, $inputFileName, $outputFileName);
             
             if ($b === true) {
-                
+                return response()->json([
+                    'message' => 'File converting succeeded.'
+                ], 200);
             } else {
                 return response()->json([
-                    'message' => 'EasyPDFCloud converting failed.'
+                    'message' => 'File converting failed.'
                 ], 500);
             }
         } catch (\Throwable $th) {
@@ -136,64 +136,99 @@ class APIController extends Controller
     }
 
     public function translateHTML(Request $request) {
-        $uFileId = $request->uFileId;
-        $uploadFile = UploadFile::find($uFileId);
-        $fileName = $uploadFile->file_name;
-        $arr = explode('.', $fileName);
-        $fName = $arr[0];
-        $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
+        try {
+            $uFileId = $request->uFileId;
+            $translatedEntityCnt = (int)$request->translatedEntityCnt;
 
-        $content = file_get_contents($outputFileName);
-        $dom = new \DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        libxml_clear_errors();
-        $xpath = new \DOMXPath($dom);
+            $uploadFile = UploadFile::find($uFileId);
+            
+            $fileName = $uploadFile->file_name;
+            $arr = explode('.', $fileName);
+            $fName = $arr[0];
+            $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
 
-        $tr = new GoogleTranslate();
-        $tr->setSource($uploadFile->from_lang);
-        $tr->setTarget($uploadFile->to_lang);
+            $content = file_get_contents($outputFileName);
+            $dom = new \DOMDocument();
+            libxml_use_internal_errors(true);
+            $dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            libxml_clear_errors();
+            $xpath = new \DOMXPath($dom);
 
-        $entities = $xpath->query('//text()');
+            $tr = new GoogleTranslate();
+            $tr->setSource($uploadFile->from_lang);
+            $tr->setTarget($uploadFile->to_lang);
 
-        foreach ($xpath->query('//text()') as $text) {
-            if ($text->parentNode->tagName === 'script' || $text->parentNode->tagName === 'style') {
-                continue;
+            $cnt = 0;
+
+            $entities = $xpath->query('//text()');
+            $array = array();
+            foreach($entities as $entity){
+                $array[] = $entity;
             }
-            if (trim($text->nodeValue)) {
-                $text->nodeValue = $tr->translate($text->nodeValue);
+            $slicedArray = array_slice($array, $translatedEntityCnt);
+
+            foreach ($slicedArray as $text) {
+                if ($cnt == 200) break;
+
+                $cnt ++;
+                $translatedEntityCnt ++;
+                
+                if ($text->parentNode->tagName === 'script' || $text->parentNode->tagName === 'style') {
+                    continue;
+                }
+                if (trim($text->nodeValue)) {
+                    try {
+                        $text->nodeValue = $tr->translate($text->nodeValue);
+                    } catch (\Throwable $th) {
+
+                    }
+                }
             }
+
+            $html = $dom->saveHTML();
+            $fh = fopen($outputFileName, "wb");
+            file_put_contents($outputFileName, $html);
+            fclose($fh);
+
+            if ($translatedEntityCnt == count($entities)) {
+                $originPath = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
+
+                $puppeteer = new Puppeteer();
+                $browser = $puppeteer->launch([
+                    "ignoreHTTPSErrors"     => true,
+                    "args"                  => ['--no-sandbox', '--disable-setuid-sandbox']
+                ]);
+                $page = $browser->newPage();
+                $page->goto($originPath . '/translation?uFileId=' . $uFileId, ["waitUntil" => "networkidle2"]);
+
+                $pdfFileName = 'uploads/' . $uploadFile->id . '/pdf/' . $fName . '.pdf';
+                $outputDirname = dirname($pdfFileName);
+                if (!is_dir($outputDirname)) {
+                    mkdir($outputDirname, 0755, true);
+                }
+
+                $page->pdf([
+                    "path" => $pdfFileName,
+                    "format" => "A4"
+                ]);
+                $browser->close();
+
+                return response()->json([
+                    'isTranslationFinished' => true,
+                    'translatedEntityCnt' => $translatedEntityCnt,
+                    'fileName' => $fName . '.pdf',
+                    'url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]/" . $pdfFileName
+                ], 200);
+            } else {
+                return response()->json([
+                    'isTranslationFinished' => false,
+                    'translatedEntityCnt' => $translatedEntityCnt
+                ], 200);
+            }
+        } catch(\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage()
+            ], 500);
         }
-
-        $html = $dom->saveHTML();
-        
-        $fh = fopen($translatedOutputFileName, "wb");
-        file_put_contents($translatedOutputFileName, $html);
-        fclose($fh);
-
-        $puppeteer = new Puppeteer();
-        $browser = $puppeteer->launch([
-            "ignoreHTTPSErrors"     => true,
-            "args"                  => ['--no-sandbox', '--disable-setuid-sandbox']
-        ]);
-        $page = $browser->newPage();
-        $page->goto($originPath . '/translation?uFileId=' . $uFileId, ["waitUntil" => "networkidle2"]);
-        $pdfFileName = 'uploads/' . $uploadFile->id . '/pdf/' . $fName . '.pdf';
-
-        $outputDirname = dirname($pdfFileName);
-        if (!is_dir($outputDirname)) {
-            mkdir($outputDirname, 0755, true);
-        }
-
-        $page->pdf([
-            "path" => $pdfFileName,
-            "format" => "A4"
-        ]);
-        $browser->close();
-
-        return response()->json([
-            'fileName' => $fName . '.pdf',
-            'url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]/" . $pdfFileName
-        ], 200);
     }
 }
