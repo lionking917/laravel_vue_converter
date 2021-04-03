@@ -7,9 +7,11 @@
                     <v-select class="lang-select" :options="languages" :reduce="language => language.code" label="label" v-model="sourceLanguage" :disabled="isConverting" placeholder="Select source language"></v-select>
                     <v-select class="lang-select mt-3" :options="languages" :reduce="language => language.code" label="label" v-model="targetLanguage" :disabled="isConverting" placeholder="Select target language"></v-select>
                     <div class="flex-1 form-ctrl mt-3">
-                        <form enctype="multipart/form-data" novalidate >
+                        <form enctype="multipart/form-data" novalidate>
                             <div class="dropbox">
-                                <input type="file" name="file" :disabled="isConverting" @change="filesChange($event.target.files)" accept="*.*" class="input-file">
+                                <input type="file" name="file" :disabled="isConverting" @change="filesChange($event.target.files)" 
+                                    accept=".pdf, .rtf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt, .text, .gif, .png, .jpg, .jpeg, .jpg, .jfif, .tif, .tiff" 
+                                    class="input-file">
                                 <div class="dropbox-inner">
                                     <div class="img-rt">
                                         <img src="../assets/img/upload.png" alt="upload image">
@@ -39,11 +41,8 @@
 
 <script>
     import languages from '../languages.js';
-    import { fileUpload, fileConvert, jobCheck, fileDownload, htmlFileSplit, htmlPdfConvert, htmlTranslate, htmlsMerge } from '../utils/fileUtil';
-    import { wait } from '../utils/otherUtil';
-
-    // const STATUS_INITIAL = 0, STATUS_UPLOADING = 1, STATUS_CONVERTING = 2, STATUS_TRANSLATING = 3, STATUS_INVERTING = 4, STATUS_SUCCESS = 5, STATUS_FAILED = 6;
-
+    import { fileUpload, fileConvert, jobCheck, fileDownload } from '../utils/fileUtil';
+    
     export default {
         mounted() {
             console.log('Component mounted.');
@@ -51,211 +50,66 @@
         data: () => {
             return {
                 languages: languages,
-                // uploadedFiles: [],
-                // uploadError: null,
                 isConverting: false,
                 sourceLanguage: '',
                 targetLanguage: '',
                 formData: null,
                 message: '',
                 uFileId: -1,
-                jobId: -1,
-                timer: null,
-                targetFiles: [],
-                isCheckingJob: false,
-                htmlCnt: 0,
-                // htmlFilename: ''
             }
         },
         methods: {
-            reset() {
-                // this.currentStatus = STATUS_INITIAL;
-                // this.message = '';
-                // this.uFileId = -1;
-                // this.formData = null;
-                // this.isConverting = false;
-            },
             uploadFile() {
                 this.isConverting = true;
-                // this.currentStatus = STATUS_UPLOADING;
-                this.message = "File uploading to server...";
-
+                this.message = 'File uploading...';
                 this.formData.append('fromLang', this.sourceLanguage);
                 this.formData.append('toLang', this.targetLanguage);
                 fileUpload(this.formData)
                 .then(res => {
-                    if (res.status == 200) {
-                        this.uFileId = res.data.uFileId;
-                        this.message = res.data.message;
-                        this.convertFile();
-                    }
+                    this.uFileId = res.data.uFileId;
+                    this.message = 'File uploaded successfully.';
+                    this.convertFile();
                 })
                 .catch(err => {
-                    this.message = 'File uploading to server failed. Try again to upload file.';
+                    console.log(err);
+                    const response = err.response;
+                    if (response.status === 500) {
+                        this.message = response.data.message;
+                    } else {
+                        this.message = 'File uploading failed. Please try again.';
+                    }
                     this.isConverting = false;
                 });
             },
             convertFile() {
-                this.message = "File uploading to ZamZar...";
-
+                this.message = "File converting...";
                 const formData = new FormData();
                 formData.append('uFileId', this.uFileId);
                 fileConvert(formData)
                 .then(res => {
-                    if (res.status == 200) {
-                        this.jobId = res.data.jobId;
-                        this.message = res.data.message;
-                        if (this.timer) {
-                            clearInterval(this.timer);
-                            this.timer = null;
-                        }
-                        this.isCheckingJob = false;
-                        this.timer = setInterval(this.checkJob, 2500);
-                    }
+                    this.message = 'File converted successfully.';
+                    this.isConverting = false;
+                    this.downloadFile(res.data.url, res.data.fileName);
                 })
                 .catch(err => {
                     console.log(err);
-                    this.message = 'File uploading to Zamzar failed. Zamzar job not started. Try again to upload file.';
-                    this.isConverting = false;
-                });
-            },
-            checkJob() {
-                if (this.isCheckingJob) return;
-                this.message = "Checking Zamzar job is finished...";
-
-                const formData = new FormData();
-                formData.append('uFileId', this.uFileId);
-                formData.append('jobId', this.jobId);
-                this.isCheckingJob = true;
-                jobCheck(formData)
-                .then(res => {
-                    if (res.status == 200) {
-                        this.message = res.data.message;
-                        const status = res.data.status;
-
-                        if (status == 'successful') {
-                            clearInterval(this.timer);
-                            this.timer = null;
-                            this.targetFiles = res.data.targetFiles;
-                            this.downloadFile();
-                        }
+                    const response = err.response;
+                    if (response.status === 500) {
+                        this.message = response.data.message;
+                    } else {
+                        this.message = 'File converting failed. Please try again.';
                     }
-                    this.isCheckingJob = false;
-                })
-                .catch(err => {
-                    console.log(err);
-                    this.message = 'Zamzar job failed. Try again to upload file.';
                     this.isConverting = false;
-                    this.isCheckingJob = false;
-                    clearInterval(this.timer);
-                    this.timer = null;
                 });
             },
-            async downloadFile() {
-                try {
-                    // this.message = 'Started downloading zamzar files to server...';
-                    // const promises = this.targetFiles.map(targetFile => {
-                        
-                    // });
-                    // await Promise.all(promises);
-                    // this.message = `Downloading zamzar files to server finished...`;
-                    // // this.splitHtmlFile();
-
-                    this.message = 'Started downloading zamzar files to server...';
-                    const targetFile = this.targetFiles[0];
-
-                    const formData = new FormData();
-                    formData.append('uFileId', this.uFileId);
-                    formData.append('targetFileId', targetFile['id']);
-                    formData.append('targetFileName', targetFile['name']);
-                    fileDownload(formData)
-                    .then(res => {
-                        if (res.status == 200) {
-                            this.message = res.data.message;
-                            // this.htmlFilename = res.data.htmlFilename;
-                            window.open(window.location.origin + "/translation?uFileId=" + this.uFileId, "_blank");
-                        }
-                    })
-                    .catch(err => {
-                        console.log(err);
-                    });
-                    this.message = `Downloading zamzar files to server finished...`;
-                } catch (err) {
-                    console.log(err);
-                    this.message = 'Downloading zamzar files to server failed. Try to upload file again.'
-                    this.isConverting = false;
-                }
+            async downloadFile(uri, name) {
+                var link = document.createElement("a");
+                link.download = name;
+                link.href = uri;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             },
-            // splitHtmlFile() {
-            //     this.message = 'Splitting html file started';
-            //     const formData = new FormData();
-            //     formData.append('uFileId', this.uFileId);
-            //     htmlFileSplit(formData)
-            //     .then(res => {
-            //         if (res.status == 200) {
-            //             this.message = res.data.message;
-            //             this.htmlCnt = res.data.htmlCnt;
-            //             this.translateHtml();
-            //         }
-            //     })
-            //     .catch(err => {
-            //         console.log(err);
-            //         this.message = 'Splitting html file failed';
-            //         this.isConverting = false;
-            //     });
-            // },
-            // async translateHtml() {
-            //     try {
-            //         this.message = 'Started translating htmls...';
-            //         const arr = new Array(this.htmlCnt).fill(1);
-            //         const promises = arr.map((item, index) => {
-            //             const formData = new FormData();
-            //             formData.append('uFileId', this.uFileId);
-            //             formData.append('fIndex', index);
-            //             return htmlTranslate(formData);
-            //         });
-            //         await Promise.all(promises);
-            //         this.message = `Translating htmls finished...`;
-            //         this.mergeHtmls();
-            //     } catch {
-            //         this.message = 'Translating htmls failed. Try to upload file again.'
-            //         this.isConverting = false;
-            //     }
-            // },
-            // mergeHtmls() {
-            //     this.message = 'Started merging htmls...';
-            //     const formData = new FormData();
-            //     formData.append('uFileId', this.uFileId);
-            //     htmlsMerge(formData)
-            //     .then(res => {
-            //         if (res.status == 200) {
-            //             this.message = res.data.message;
-            //             // this.htmlFilename = res.data.htmlFilename;
-            //         }
-            //     })
-            //     .catch(err => {
-            //         console.log(err);
-            //         this.message = 'Merging htmls failed';
-            //         this.isConverting = false;
-            //     });
-            //     this.message = `Merging htmls finished...`;
-            // },
-            // convertHtmlPdf() {
-            //     this.message = 'Converting html to pdf started';
-            //     const formData = new FormData();
-            //     formData.append('uFileId', this.uFileId);
-            //     htmlPdfConvert(formData)
-            //     .then(res => {
-            //         if (res.status == 200) {
-            //             this.message = res.data.message;
-            //         }
-            //     })
-            //     .catch(err => {
-            //         console.log(err);
-            //         this.message = 'Converting html to pdf failed';
-            //         this.isConverting = false;
-            //     });
-            // },
             filesChange(fileList) {
                 // handle file changes
                 this.formData = new FormData();

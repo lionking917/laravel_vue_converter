@@ -6,9 +6,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use PDF;
 use App\Models\UploadFile;
+use Spatie\Browsershot\Browsershot;
+use Nesk\Puphpeteer\Puppeteer;
+use Nesk\Rialto\Data\JsFunction;
+use Stichoza\GoogleTranslate\GoogleTranslate;
 
 class APIController extends Controller
 {
+    public $_accessToken = '';
+    public $_tokenType = '';
+    public $workflows = [
+        'CONVERTPDFTOWORD' => '0000000000000001',
+        'CONVERTPDFTOEXCEL' => '0000000000000002',
+        'CONVERTFILESTOPDF' => '0000000000000003',
+        'COMBINEFILESTOPDF' => '0000000000000004',
+        'TOHTML' => '0000000006AE5CDC',
+        'TOPDF' => '0000000006AE5CC8'
+    ];
+    
     public function __construct()
     {
     }
@@ -21,7 +36,6 @@ class APIController extends Controller
             $fileSize = $request->fileSize;
             $fromLang = $request->fromLang;
             $toLang = $request->toLang;
-
             $uploadFile = UploadFile::create([
                 'file_type' => $fileType,
                 'file_name' => $fileName,
@@ -33,7 +47,6 @@ class APIController extends Controller
             Storage::disk('uploads')->put('/' . $uploadFile->id . '/original/' . $fileName, file_get_contents($file));
 
             return response()->json([
-                'message' => 'File uploaded successfully to server',
                 'uFileId' => $uploadFile->id
             ], 200);
         } catch (\Throwable $th) {
@@ -43,58 +56,76 @@ class APIController extends Controller
         }
     }
 
+    public function convertEasyPdfCloud($workflowId, $inputFileName, $outputFileName) {
+        try {
+            $client = new \Bcl\EasyPdfCloud\Client(env('PDFCLOUD_CLIENT_ID'), env('PDFCLOUD_CLIENT_SECRET'));
+
+            $enableTestMode = true;
+
+            $job = $client->startNewJobWithFilePath($workflowId, $inputFileName, $enableTestMode);
+            // Wait until job execution is completed
+            $result = $job->waitForJobExecutionCompletion();
+            // Save output to file
+            $outputDirname = dirname($outputFileName);
+            if (!is_dir($outputDirname)) {
+                mkdir($outputDirname, 0755, true);
+            }
+            $fh = fopen($outputFileName, "wb");
+            file_put_contents($outputFileName, $result->getFileData()->getContents());
+            fclose($fh);
+            
+            return true;
+        } catch (\Throwable $th) {
+            return $th->getMessage();
+        }
+    }
+
     public function convertFile(Request $request) {
         try {
+            $originPath = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
             $uFileId = $request->uFileId;
             $uploadFile = UploadFile::find($uFileId);
 
             if (!$uploadFile) {
                 return response()->json([
                     'message' => 'File not exist on server'
-                ]);
+                ], 500);
             }
+
+            $fileName = $uploadFile->file_name;
+            $arr = explode('.', $fileName);
+            $fName = $arr[0];
+
+            $inputFileName = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $uploadFile->file_name;
+
+            if ($uploadFile->file_type !== 'application/pdf') {
+                $workflowId = $this->workflows['CONVERTFILESTOPDF'];
+                
+                $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $fName . '.pdf';
+
+                $b = $this->convertEasyPdfCloud($workflowId, $inputFileName, $outputFileName);
+
+                if ($b === true) {
+                    $inputFileName = $outputFileName;
+                } else {
+                    return response()->json([
+                        'message' => $th->getMessage()
+                    ], 500);
+                }
+            }
+
+            $workflowId = $this->workflows['TOHTML'];
             
-            $endpoint = "https://sandbox.zamzar.com/v1/jobs";
-            $apiKey = env('ZAMZAR_API_KEY');
-            $sourceFilePath = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $uploadFile->file_name;
-            $targetFormat = "html5-1page";
+            $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
+            $translatedOutputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '_translated.html';
 
-            // Since PHP 5.5+ CURLFile is the preferred method for uploading files
-            if(function_exists('curl_file_create')) {
-                $sourceFile = curl_file_create($sourceFilePath);
-            } else {
-                $sourceFile = '@' . realpath($sourceFilePath);
-            }
-
-            $postData = array(
-                "source_file" => $sourceFile,
-                "target_format" => $targetFormat
-            );
-
-            $ch = curl_init(); // Init curl
-            curl_setopt($ch, CURLOPT_URL, $endpoint); // API endpoint
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
-            // curl_setopt($ch, CURLOPT_SAFE_UPLOAD, false); // Enable the @ prefix for uploading files
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); // Return response as a string
-            curl_setopt($ch, CURLOPT_USERPWD, $apiKey . ":"); // Set the API key as the basic auth username
-            $body = curl_exec($ch);
-            curl_close($ch);
-
-            $response = json_decode($body, true);
-
-            if ($response && !isset($response['errors'])) {
-                $uploadFile->job_id = $response['id'];
-                $uploadFile->status = 'initialising';
-                $uploadFile->save();
-
-                return response()->json([
-                    'message' => 'File converting started on ZamZar',
-                    'jobId' => $response['id']
-                ]);
+            $b = $this->convertEasyPdfCloud($workflowId, $inputFileName, $outputFileName);
+            
+            if ($b === true) {
+                
             } else {
                 return response()->json([
-                    'message' => 'File uploading to Zamzar failed'
+                    'message' => 'EasyPDFCloud converting failed.'
                 ], 500);
             }
         } catch (\Throwable $th) {
@@ -104,213 +135,65 @@ class APIController extends Controller
         } 
     }
 
-    public function checkJob(Request $request) {
-        try {
-            $uFileId = $request->uFileId;
-            $jobId = $request->jobId;
-          
-            $endpoint = "https://sandbox.zamzar.com/v1/jobs/$jobId";
-            $apiKey = env('ZAMZAR_API_KEY');
+    public function translateHTML(Request $request) {
+        $uFileId = $request->uFileId;
+        $uploadFile = UploadFile::find($uFileId);
+        $fileName = $uploadFile->file_name;
+        $arr = explode('.', $fileName);
+        $fName = $arr[0];
+        $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
 
-            $ch = curl_init(); // Init curl
-            curl_setopt($ch, CURLOPT_URL, $endpoint); // API endpoint
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); // Return response as a string
-            curl_setopt($ch, CURLOPT_USERPWD, $apiKey . ":"); // Set the API key as the basic auth username
-            $body = curl_exec($ch);
-            curl_close($ch);
+        $content = file_get_contents($outputFileName);
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        $xpath = new \DOMXPath($dom);
 
-            $job = json_decode($body, true);
+        $tr = new GoogleTranslate();
+        $tr->setSource($uploadFile->from_lang);
+        $tr->setTarget($uploadFile->to_lang);
 
-            if ($job['status'] == 'successful') {
-                $uploadFile = UploadFile::find($uFileId);
+        $entities = $xpath->query('//text()');
 
-                if ($uploadFile) {
-                    $uploadFile->target_files = json_encode($job['target_files']);
-                    $uploadFile->status = 'successful';
-                    $uploadFile->save();
-                }
-
-                return response()->json([
-                    'message' => 'Zamzar job finished successfully',
-                    'status' => 'successful',
-                    'targetFiles' => $job['target_files']
-                ]);
-            } else {
-                return response()->json([
-                    'message' => 'Zamzar job still doing...',
-                    'status' => 'initialising'
-                ]);
+        foreach ($xpath->query('//text()') as $text) {
+            if ($text->parentNode->tagName === 'script' || $text->parentNode->tagName === 'style') {
+                continue;
             }
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => $th->getMessage()
-            ], 500);
-        }
-    }
-
-    public function downloadFile(Request $request) {
-        try {
-            $uFileId = $request->uFileId;
-            $targetFileId = $request->targetFileId;
-            $targetFileName = $request->targetFileName;
-
-            $localFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $targetFileName;
-            $localDirname = dirname($localFilename);
-
-            if (!is_dir($localDirname)) {
-                mkdir($localDirname, 0755, true);
+            if (trim($text->nodeValue)) {
+                $text->nodeValue = $tr->translate($text->nodeValue);
             }
-
-            $endpoint = "https://sandbox.zamzar.com/v1/files/$targetFileId/content";
-            $apiKey = env('ZAMZAR_API_KEY');
-
-            $ch = curl_init(); // Init curl
-            curl_setopt($ch, CURLOPT_URL, $endpoint); // API endpoint
-            curl_setopt($ch, CURLOPT_USERPWD, $apiKey . ":"); // Set the API key as the basic auth username
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
-
-            $fh = fopen($localFilename, "wb");
-            curl_setopt($ch, CURLOPT_FILE, $fh);
-
-            $body = curl_exec($ch);
-            curl_close($ch);
-
-            fclose($fh);
-
-            return response()->json([
-                'message' => 'Downloaded zamzar file ' . $targetFileName . ' to server successfully',
-                'htmlFilename' => $localFilename
-            ]);
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => $th->getMessage()
-            ], 500);
         }
+
+        $html = $dom->saveHTML();
+        
+        $fh = fopen($translatedOutputFileName, "wb");
+        file_put_contents($translatedOutputFileName, $html);
+        fclose($fh);
+
+        $puppeteer = new Puppeteer();
+        $browser = $puppeteer->launch([
+            "ignoreHTTPSErrors"     => true,
+            "args"                  => ['--no-sandbox', '--disable-setuid-sandbox']
+        ]);
+        $page = $browser->newPage();
+        $page->goto($originPath . '/translation?uFileId=' . $uFileId, ["waitUntil" => "networkidle2"]);
+        $pdfFileName = 'uploads/' . $uploadFile->id . '/pdf/' . $fName . '.pdf';
+
+        $outputDirname = dirname($pdfFileName);
+        if (!is_dir($outputDirname)) {
+            mkdir($outputDirname, 0755, true);
+        }
+
+        $page->pdf([
+            "path" => $pdfFileName,
+            "format" => "A4"
+        ]);
+        $browser->close();
+
+        return response()->json([
+            'fileName' => $fName . '.pdf',
+            'url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]/" . $pdfFileName
+        ], 200);
     }
-
-    // public function splitHtmlFile(Request $request) {
-    //     try {
-    //         $uFileId = $request->uFileId;
-    //         $uploadFile = UploadFile::find($uFileId);
-    //         $fileName = $uploadFile->file_name;
-    //         $arr = explode('.', $fileName);
-    //         $fName = $arr[0];
-    //         $htmlFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $fName . '.html';
-
-    //         $htmlContents = file_get_contents($htmlFilename);
-    //         // preg_match_all('/<[^>]++>|[^<>\s]++/', $htmlContents, $matches);
-    //         // $srcSplittedHtml = implode(" ", $matches[0]);
-    //         $splitted = str_split($htmlContents, 4900);
-    //         $srcSplittedHtml = implode(":::SPLITTER:::", $splitted);
-
-    //         $uploadFile->src_splitted_html = $srcSplittedHtml;
-    //         $uploadFile->save();
-
-    //         return response()->json([
-    //             'message' => 'Splitting html file succeeded',
-    //             'htmlCnt' => count($splitted)
-    //         ]);
-    //     } catch (\Throwable $th) {
-    //         return response()->json([
-    //             'message' => $th->getMessage()
-    //         ], 500);
-    //     }
-    // }
-
-    // public function word_chunk($str, $len = 76, $end = ":::SPLITTER:::") {
-    //     $pattern = '~.{1,' . $len . '}~u'; // like "~.{1,76}~u"
-    //     $str = preg_replace($pattern, '$0' . $end, $str);
-    //     return rtrim($str, $end);
-    // }
-
-    // public function translateHtml(Request $request) {
-    //     try {
-    //         $uFileId = $request->uFileId;
-    //         $fIndex = $request->fIndex;
-    //         $uploadFile = UploadFile::find($uFileId);
-    //         $srcSplittedHtml = $uploadFile->src_splitted_html;
-    //         $splitted = explode(":::SPLITTER:::", $srcSplittedHtml);
-
-    //         $apiKey = 'AIzaSyCbifPGAIYvd1PsPw5csoNnJcx4Ebq0emM';
-    //         $value = $splitted[$fIndex];
-	
-    //         $toLang = $uploadFile->to_lang;
-
-    //         $url ="https://translation.googleapis.com/language/translate/v2?key=$apiKey&q=$value&target=$toLang&format=html";
-
-    //         $ch = curl_init();
-    //         curl_setopt($ch, CURLOPT_URL, $url);
-    //         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    //         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-    //         $body = curl_exec($ch);
-    //         curl_close($ch);
-
-    //         $json = json_decode($body);
-
-    //         if ($json && $json->data) {
-    //             $trnsSplittedHtml = $uploadFile->trns_splitted_html;
-    //             $trnsSplittedHtml .= $json->data->translations[0]->translatedText;
-
-    //             $uploadFile->trns_splitted_html = $trnsSplittedHtml;
-    //             $uploadFile->save();
-    //         }
-    //         return response()->json([
-    //             'message' => 'Translating html file succeeded'
-    //         ]);
-    //     } catch (\Throwable $th) {
-    //         return response()->json([
-    //             'message' => $th->getMessage()
-    //         ], 500);
-    //     }
-    // }
-
-    // public function mergeHtmls(Request $request) {
-    //     try {
-    //         $uFileId = $request->uFileId;
-    //         $uploadFile = UploadFile::find($uFileId);
-    //         $fileName = $uploadFile->file_name;
-    //         $arr = explode('.', $fileName);
-    //         $fName = $arr[0];
-    //         $transHtmlFilename = public_path() . '/uploads/' . $uFileId . '/translated/' . $fName . '.html';
-    //         $localDirname = dirname($transHtmlFilename);
-
-    //         if (!is_dir($localDirname)) {
-    //             mkdir($localDirname, 0755, true);
-    //         }
-
-    //         $trnsSplittedHtml = $uploadFile->trns_splitted_html;
-
-    //         $fh = fopen($transHtmlFilename, "wb");
-    //         file_put_contents($transHtmlFilename, $trnsSplittedHtml);
-    //         fclose($fh);
-
-    //         return response()->json([
-    //             'message' => 'Merging htmls succeeded',
-    //             'htmlFilename' => $transHtmlFilename
-    //         ]);
-    //     } catch (\Throwable $th) {
-    //         return response()->json([
-    //             'message' => $th->getMessage()
-    //         ], 500);
-    //     }
-    // }
-
-    // public function convertHtmlPdf(Request $request) {
-    //     try {
-    //         $uFileId = $request->uFileId;
-    //         $uploadFile = UploadFile::find($uFileId);
-    //         $fileName = $uploadFile->file_name;
-    //         $arr = explode('.', $fileName);
-    //         $fName = $arr[0];
-    //         $htmlFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $fName . '.html';
-    //         $pdfFilename = public_path() . '/uploads/' . $uFileId . '/converted/' . $fName . '.pdf';
-            
-    //         return PDF::loadFile($htmlFilename)->save($pdfFilename)->stream('download.pdf');
-    //     } catch (\Throwable $th) {
-    //         return response()->json([
-    //             'message' => $th->getMessage()
-    //         ], 500);
-    //     }
-    // }
-    
 }
