@@ -6,26 +6,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use PDF;
 use App\Models\UploadFile;
-use Spatie\Browsershot\Browsershot;
-use Nesk\Puphpeteer\Puppeteer;
-use Nesk\Rialto\Data\JsFunction;
-use Stichoza\GoogleTranslate\GoogleTranslate;
+use JoggApp\GoogleTranslate\GoogleTranslateClient;
 
 class APIController extends Controller
 {
     public $_accessToken = '';
     public $_tokenType = '';
-    public $workflows = [
-        'CONVERTPDFTOWORD' => '0000000000000001',
-        'CONVERTPDFTOEXCEL' => '0000000000000002',
-        'CONVERTFILESTOPDF' => '0000000000000003',
-        'COMBINEFILESTOPDF' => '0000000000000004',
-        'TOHTML' => '0000000006AE5CDC',
-        'TOPDF' => '0000000006AE5CC8'
-    ];
+    public $workflows = [];
     
     public function __construct()
     {
+        $this->workflows = [
+            // 'CONVERTPDFTOWORD' => '0000000000000001',
+            // 'CONVERTPDFTOEXCEL' => '0000000000000002',
+            'CONVERT_FILES_TO_PDF' => env('CONVERT_FILES_TO_PDF'),
+            // 'COMBINEFILESTOPDF' => '0000000000000004',
+            'CONVERT_TO_HTML' => env('CONVERT_TO_HTML')
+            // 'TOPDF' => '0000000006AE5CC8'
+        ];
     }
 
     public function uploadFile(Request $request) {
@@ -35,13 +33,12 @@ class APIController extends Controller
             $fileName = $request->fileName;
             $fileSize = $request->fileSize;
             $fromLang = $request->fromLang;
-            $toLang = $request->toLang;
+            $targetLang = $request->targetLang;
             $uploadFile = UploadFile::create([
                 'file_type' => $fileType,
                 'file_name' => $fileName,
                 'file_size' => $fileSize,
-                'from_lang' => $fromLang,
-                'to_lang' => $toLang
+                'target_lang' => $targetLang
             ]);
 
             Storage::disk('uploads')->put('/' . $uploadFile->id . '/original/' . $fileName, file_get_contents($file));
@@ -98,7 +95,7 @@ class APIController extends Controller
             $inputFileName = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $uploadFile->file_name;
 
             if ($uploadFile->file_type !== 'application/pdf') {
-                $workflowId = $this->workflows['CONVERTFILESTOPDF'];
+                $workflowId = $this->workflows['CONVERT_FILES_TO_PDF'];
                 
                 $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/original/' . $fName . '.pdf';
 
@@ -113,7 +110,7 @@ class APIController extends Controller
                 }
             }
 
-            $workflowId = $this->workflows['TOHTML'];
+            $workflowId = $this->workflows['CONVERT_TO_HTML'];
             
             $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
 
@@ -145,19 +142,15 @@ class APIController extends Controller
             $fileName = $uploadFile->file_name;
             $arr = explode('.', $fileName);
             $fName = $arr[0];
-            $outputFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
+            $outputHtmlFileName = public_path() . '/uploads/' . $uploadFile->id . '/html/' . $fName . '.html';
 
-            $content = file_get_contents($outputFileName);
+            $content = file_get_contents($outputHtmlFileName);
             $dom = new \DOMDocument();
             libxml_use_internal_errors(true);
             $dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
             libxml_clear_errors();
             $xpath = new \DOMXPath($dom);
-
-            $tr = new GoogleTranslate();
-            $tr->setSource($uploadFile->from_lang);
-            $tr->setTarget($uploadFile->to_lang);
-
+            
             $cnt = 0;
 
             $entities = $xpath->query('//text()');
@@ -167,52 +160,67 @@ class APIController extends Controller
             }
             $slicedArray = array_slice($array, $translatedEntityCnt);
 
+            $tr = new GoogleTranslateClient([
+                'api_key' => env('GOOGLE_TRANSLATE_API_KEY'),
+                'default_target_translation' => 'en'
+            ]);
+
             foreach ($slicedArray as $text) {
                 if ($cnt == 200) break;
 
                 $cnt ++;
                 $translatedEntityCnt ++;
                 
-                if ($text->parentNode->tagName === 'script' || $text->parentNode->tagName === 'style') {
+                if ($text->parentNode->tagName === 'script' || $text->parentNode->tagName === 'noscript' || $text->parentNode->tagName === 'style') {
                     continue;
                 }
                 if (trim($text->nodeValue)) {
                     try {
-                        $text->nodeValue = $tr->translate($text->nodeValue);
+                        $outputs = $tr->translate($text->nodeValue, $uploadFile->target_lang);
+                        $text->nodeValue = $outputs['text'];
                     } catch (\Throwable $th) {
-
+                        $th = $th;
                     }
                 }
             }
 
             $html = $dom->saveHTML();
-            $fh = fopen($outputFileName, "wb");
-            file_put_contents($outputFileName, $html);
-            fclose($fh);
+            file_put_contents($outputHtmlFileName, $html);
 
             if ($translatedEntityCnt == count($entities)) {
-                $originPath = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
-
-                $puppeteer = new Puppeteer();
-                $browser = $puppeteer->launch([
-                    "ignoreHTTPSErrors"     => true,
-                    "args"                  => ['--no-sandbox', '--disable-setuid-sandbox']
-                ]);
-                $page = $browser->newPage();
-                $page->goto($originPath . '/translation?uFileId=' . $uFileId, ["waitUntil" => "networkidle2"]);
-
+                $outputPdfFileName = public_path() . '/uploads/' . $uploadFile->id . '/pdf/' . $fName . '.pdf';
                 $pdfFileName = 'uploads/' . $uploadFile->id . '/pdf/' . $fName . '.pdf';
-                $outputDirname = dirname($pdfFileName);
+                $outputDirname = dirname($outputPdfFileName);
                 if (!is_dir($outputDirname)) {
                     mkdir($outputDirname, 0755, true);
                 }
 
-                $page->pdf([
-                    "path" => $pdfFileName,
-                    "format" => "A4"
-                ]);
-                $browser->close();
+                // $new_elm = $dom->createElement('style', 'body {font-family: DejaVu Sans;}');
+                // $new_elm->setAttribute('type', 'text/css');
 
+                // // Inject the new <style> Tag in the document head
+                // $head = $dom->getElementsByTagName('head')->item(0);
+                // $head->appendChild($new_elm);
+
+                // $html = $dom->saveHTML();
+                // file_put_contents($outputHtmlFileName, $html);
+
+                $config = [
+                    'mode' => '+aCJK', 
+                    // "allowCJKoverflow" => true, 
+                    "autoScriptToLang" => true,
+                    // "allow_charset_conversion" => false,
+                    "autoLangToFont" => true,
+                ];
+
+                // $mpdf = new PDF($config);
+                // $mpdf->loadHTML($html);
+
+                // $mpdf->SetAutoFont();
+                // $mpdf->autoScriptToLang = true;
+                // $mpdf->autoLangToFont   = true;
+
+                PDF::loadHTML($html, $config)->save($outputPdfFileName);
                 return response()->json([
                     'isTranslationFinished' => true,
                     'translatedEntityCnt' => $translatedEntityCnt,

@@ -14,23 +14,4 @@ class HomeController extends Controller
     public function index() {
         return view('index');
     }
-
-    public function translation(Request $request) {
-        $uFileId = $request->uFileId;
-        $uploadFile = UploadFile::find($uFileId);
-        $fileName = $uploadFile->file_name;
-        $arr = explode('.', $fileName);
-        $fName = $arr[0];
-        
-        $htmlFilename = public_path() . '/uploads/' . $uFileId . '/html/' . $fName . '.html';
-
-        $content = file_get_contents($htmlFilename);
-        $dom = new \DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($content);
-        libxml_clear_errors();
-        
-        return($dom->saveHTML());
-    }
-    
 }

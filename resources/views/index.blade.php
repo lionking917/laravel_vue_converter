@@ -18,6 +18,5 @@
     <!-- jQuery -->
     <script src="{{asset('js/app.js')}}"></script>
     <script src="{{asset('assets/libs/bootstrap/js/bootstrap.min.js')}}"></script>
-    <!-- <script src="https://maps.googleapis.com/maps/api/js?key='{{ env('GOOGLE_API_KEY') }}'&libraries=places"></script> -->
 </body>
 </html>

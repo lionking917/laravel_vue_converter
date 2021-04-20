@@ -4,7 +4,6 @@
             <div class="card">
                 <div class="card-header text-center">Converter && Translator</div>
                 <div class="card-body">
-                    <v-select class="lang-select" :options="languages" :reduce="language => language.code" label="label" v-model="sourceLanguage" :disabled="isConverting" placeholder="Select source language"></v-select>
                     <v-select class="lang-select mt-3" :options="languages" :reduce="language => language.code" label="label" v-model="targetLanguage" :disabled="isConverting" placeholder="Select target language"></v-select>
                     <div class="flex-1 form-ctrl mt-3">
                         <form enctype="multipart/form-data" novalidate>
@@ -27,7 +26,7 @@
                         </form>
                     </div>
                     <div class="mt-3 text-center">
-                        <button type="button" class="btn btn-primary" @click="uploadFile()" :disabled="!sourceLanguage || !targetLanguage || formData == null || isConverting" >Upload</button>
+                        <button type="button" class="btn btn-primary" @click="uploadFile()" :disabled="!targetLanguage || formData == null || isConverting" >Upload</button>
                     </div>
                     <div class="mt-3 text-center">
                         <p>{{ message }}</p>
@@ -51,7 +50,6 @@
             return {
                 languages: languages,
                 isConverting: false,
-                sourceLanguage: '',
                 targetLanguage: '',
                 formData: null,
                 message: '',
@@ -66,8 +64,7 @@
             uploadFile() {
                 this.isConverting = true;
                 this.message = 'File uploading...';
-                this.formData.append('fromLang', this.sourceLanguage);
-                this.formData.append('toLang', this.targetLanguage);
+                this.formData.append('targetLang', this.targetLanguage);
                 fileUpload(this.formData)
                 .then(res => {
                     this.uFileId = res.data.uFileId;
@@ -121,6 +118,8 @@
                     if (res.data.isTranslationFinished) {
                         this.isConverting = false;
                         this.message = 'File translated successfully.';
+                        this.translatedEntityCnt = 0;
+                        this.translationFailedCnt = 0;
                         clearInterval(this.interval);
                         this.downloadFile(res.data.url, res.data.fileName);
                     }
@@ -132,7 +131,8 @@
                     this.translationFailedCnt ++;
                     if (this.translationFailedCnt == 10) {
                         this.isConverting = false;
-                        this.isTranslating = false;
+                        this.translatedEntityCnt = 0;
+                        this.translationFailedCnt = 0;
                         clearInterval(this.interval);
                         this.message = 'File translation failed. Please try again.';
                     }
